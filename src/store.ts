@@ -1,6 +1,6 @@
 import {
   actionCreator, EmptyActionDescription, TypedActionDescription,
-  reducerFromActions, defineStore, extendWithActions,
+  reducerFromActions, defineStore, extendWithActions, reassign, reassignif,
 } from "rxstore";
 import { Validator, ValidationResult, successResult } from "rxvalidation";
 import {
@@ -143,8 +143,39 @@ export interface FormStateChange {
 const fieldAction = actionCreator<FormFieldState>("RxStore@FORMS@FIELD@");
 const groupAction = actionCreator<FormGroupState>("RxStore@FORMS@GROUP@");
 
+const updateStateWithChange =
+  <TState extends FormState>
+    (state: TState, change: FormStateChange) => {
+    let result = state;
+    // VALUE
+    if (change.changeValue) {
+      result = reassign(
+        result, {
+          value: change.changeValue.value,
+        });
+    }
+    // FOCUS
+    if (change.changeFocus) {
+      result = reassign(result, {
+        hasFocus: change.changeFocus.hasFocus,
+        isTouched: change.changeFocus.isTouched,
+        isUntouched: !change.changeFocus.isTouched,
+      });
+    }
+    // DIRTY
+    if (change.changeDirty) {
+      result = reassignif(
+        change.changeDirty.isDirty !== state.isDirty,
+        result, {
+          isDirty: change.changeDirty.isDirty,
+          isPristine: !change.changeDirty.isDirty,
+        });
+    }
+    return result;
+  };
+
 export const FieldActions = {
-  stateChanged: fieldAction.of<FormStateChange>("STATE_CHANGED"),
+  stateChanged: fieldAction.of<FormStateChange>("STATE_CHANGED", updateStateWithChange),
 
   update: fieldAction.of<any>("UPDATE"),
   blur: fieldAction("BLUR"),

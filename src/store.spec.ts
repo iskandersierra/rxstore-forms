@@ -120,9 +120,21 @@ describe("defaultGroupState", () => {
   }); // describe Given a simple form group definition
 }); // describe defaultGroupState
 
+const initTextField = defaultFieldState(field("text"));
+const helloTextField = reassign(initTextField, { value: "hello" });
+const focusedTextField = reassign(initTextField, { hasFocus: true, isTouched: true, isUntouched: false });
+const touchedTextField = reassign(initTextField, { hasFocus: false, isTouched: true, isUntouched: false });
+const dirtyTextField = reassign(initTextField, { isDirty: true, isPristine: false });
+
 testActions(FieldActions, "FieldActions",
   expectedActions<FormFieldState>("RxStore@FORMS@FIELD@", actions => {
-    actions.typed("stateChanged", "STATE_CHANGED");
+    actions.typed("stateChanged", "STATE_CHANGED")
+      .withSample(initTextField, {}, initTextField)
+      .withSample(initTextField, { changeValue: { value: "hello" } }, helloTextField)
+      .withSample(helloTextField, { changeValue: { value: "" } }, initTextField)
+      .withSample(initTextField, { changeFocus: { hasFocus: true, isTouched: true } }, focusedTextField)
+      .withSample(initTextField, { changeFocus: { hasFocus: false, isTouched: true } }, touchedTextField)
+      .withSample(initTextField, { changeDirty: { isDirty: true } }, dirtyTextField);
 
     actions.typed("update", "UPDATE");
 
