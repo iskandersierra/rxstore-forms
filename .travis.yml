@@ -10,7 +10,7 @@ install:
   - npm install
 
 script:
-  - npm run "test:once"
+  # - npm run "test:once" # This is done already by coverage:once
   - npm run "coverage:once"
   - coveralls < ./coverage/lcov.info || true # if coveralls doesn't have it covered
 

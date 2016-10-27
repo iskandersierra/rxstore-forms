@@ -56,6 +56,7 @@
     "rxjs": "^5.0.0-rc.1",
     "rxstore": "^1.*",
     "rxstore-jest": "^0.*",
+    "rxvalidation": "^0.*",
     "standard-version": "^2.4.0",
     "tslint": "^3.15.1",
     "tslint-loader": "^2.1.5",
@@ -71,7 +72,8 @@
     "deep-equal": "^1.0.1",
     "object-assign": "^4.1.0",
     "rxjs": "^5.0.0-rc.1",
-    "rxstore": "^1.*"
+    "rxstore": "^1.*",
+    "rxvalidation": "^0.*"
   },
   "jest": {
     "verbose": true,
