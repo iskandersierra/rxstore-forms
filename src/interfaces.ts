@@ -21,6 +21,7 @@ export interface FormFieldState { }
 export interface FormGroupState { }
 export type FormState = FormFieldState | FormGroupState;
 
+export interface FormCommonStore { }
 export interface FormFieldStore { }
 export interface FormGroupStore { }
 export type FormStore = FormFieldStore | FormGroupStore;
@@ -28,7 +29,6 @@ export type FormStore = FormFieldStore | FormGroupStore;
 export type FormFieldStateOptionsPerType = {
   [type: string]: FormFieldStateOptions;
 };
-
 
 /* FORMS: DEFINITIONS */
 export type FieldValidatorFactory = (state: FormFieldState) => Validator;
@@ -79,7 +79,7 @@ export interface FormFieldStateOptions {
   initialValue: any;
   isEmpty: (value: any, state: FormFieldState) => boolean;
   coerce: (value: any, state: FormFieldState) => any;
-  compare: (value: any, oldValue: any, state: FormFieldState) => boolean;
+  areEqual: (value: any, oldValue: any, state: FormFieldState) => boolean;
   validatorFactories: FieldValidatorFactory[];
 }
 
@@ -100,7 +100,6 @@ export interface FormNumericFieldStateOptions extends FormFieldStateOptions {
   maxValue?: number;
   precision: number;
 }
-
 
 export interface CommonFormState {
   // Field or group value
@@ -146,16 +145,18 @@ export interface CreateFormStoreOptions {
   globalGroupOptions?: FormGroupStateOptions;
 }
 
-export interface FormFieldStore extends Store<FormFieldState> {
-  kind: "field";
+export interface FormCommonStore {
+  value: any;
   reset(): void;
+}
+
+export interface FormFieldStore extends Store<FormFieldState>, FormCommonStore {
+  kind: "field";
   update(value: any): void;
   blur(): void;
   focus(): void;
 }
 
-export interface FormGroupStore extends Store<FormGroupState> {
+export interface FormGroupStore extends Store<FormGroupState>, FormCommonStore {
   kind: "group";
-  reset(): void;
 }
-

@@ -1,9 +1,23 @@
-export const compose = <T, U, V>(
-  f: (u: U) => T,
-  g: (v: V) => U)
-  : ((v: V) => T) =>
-  (v: V) =>
-    f(g(v));
+export const compose = <Z, Y, X>(
+  f: (y: Y) => Z,
+  g: (x: X) => Y)
+  : ((x: X) => Z) =>
+  (x: X) => f(g(x));
+
+export const compose3 = <U, Z, Y, X>(
+  f: (z: Z) => U,
+  g: (y: Y) => Z,
+  h: (x: X) => Y)
+  : ((x: X) => U) =>
+  compose(f, compose(g, h));
+
+export const compose4 = <V, U, Z, Y, X>(
+  f: (u: U) => V,
+  g: (z: Z) => U,
+  h: (y: Y) => Z,
+  j: (x: X) => Y)
+  : ((x: X) => V) =>
+  compose(compose(f, g), compose(h, j));
 
 export const assignIfExists = (
   to: any, source: any, name: string,

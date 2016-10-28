@@ -18,7 +18,7 @@ export const mergeOptions = (...options: ({ validatorFactories: any[] })[]) => {
 
 const isEmpty = (value: any) => !value;
 const coerce = (value: any) => value;
-const compare = (value: any, oldValue: any) => value === oldValue;
+const areEqual = (value: any, oldValue: any) => value === oldValue;
 const textCoerce = (value: any): any => !value ? "" :
   (typeof value === "string" ? value : String(value).valueOf());
 const boolCoerce = (value: any, state: FormFieldState): any => !!value;
@@ -29,7 +29,7 @@ const globalFieldStateOptions = {
   initialValue: null,
   isEmpty,
   coerce,
-  compare,
+  areEqual,
   validatorFactories: [],
 } as FormFieldStateOptions;
 

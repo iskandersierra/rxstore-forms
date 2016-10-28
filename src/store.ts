@@ -1,13 +1,37 @@
+import { Observable } from "rxjs/Observable";
+// import "rxjs/add/observable/concat";
+import "rxjs/add/observable/merge";
+import "rxjs/add/observable/empty";
+import "rxjs/add/observable/of";
+// import "rxjs/add/operator/catch";
+// import "rxjs/add/operator/concat";
+// import "rxjs/add/operator/delay";
+// import "rxjs/add/operator/do";
+// import "rxjs/add/operator/first";
+import "rxjs/add/operator/filter";
+// import "rxjs/add/operator/last";
+import "rxjs/add/operator/map";
+// import "rxjs/add/operator/observeOn";
+// import "rxjs/add/operator/skip";
+// import "rxjs/add/operator/subscribeOn";
+import "rxjs/add/operator/switchMap";
+// import "rxjs/add/operator/takeLast";
+// import "rxjs/add/operator/takeUntil";
+// import "rxjs/add/operator/timeout";
+// import "rxjs/add/operator/toPromise";
 import {
   actionCreator, EmptyActionDescription, TypedActionDescription,
-  reducerFromActions, defineStore, extendWithActions, reassign, reassignif,
+  reducerFromActions, defineStore, extendWithActions, extendWith,
+  withEffects, withEffectsOn,
+  reassign, reassignif,
+  StateUpdate, ICreateStoreOptions, Action,
 } from "rxstore";
 import { Validator, ValidationResult, successResult } from "rxvalidation";
 import {
   FormState, FormFieldState, FormGroupState, CommonFormState,
   FormFieldDefinition, FormGroupDefinition, FormDefinition,
   CreateFormStoreOptions, FieldValidatorFactory, GroupValidatorFactory,
-  FormFieldStateOptions, FormFieldOptions,
+  FormFieldStateOptions, FormFieldOptions, FormCommonStore,
   FormGroupStateOptions, FormGroupOptions,
   FormStore, FormGroupChildren, FormFieldStore, FormGroupStore,
 } from "./interfaces";
@@ -18,12 +42,12 @@ import { assignIfExists } from "./utils";
 
 /* STATE MANIPULATION */
 
-// const createGroupValue = (children: { [name: string]: FormState }): any => {
-//   let values: any = {};
-//   Object.keys(children)
-//     .forEach(key => values[key] = children[key].value);
-//   return values;
-// };
+const createGroupValue = (children: { [name: string]: FormStore }): any => {
+  let values: any = {};
+  Object.keys(children)
+    .forEach(key => values[key] = children[key].value);
+  return values;
+};
 
 const createFieldValidatorFactories = (
   validators: Validator[] | undefined,
@@ -97,8 +121,11 @@ export const defaultFieldState =
       });
   };
 
-let createFormStoreFunc: (def: FormDefinition,
-  createOptions?: CreateFormStoreOptions) => FormStore;
+let createFormStoreFunc: (
+  def: FormDefinition,
+  createOptions?: CreateFormStoreOptions,
+  storeOptions?: ICreateStoreOptions<CommonFormState>,
+) => FormStore;
 
 export const defaultGroupState =
   (def: FormGroupDefinition,
@@ -127,7 +154,7 @@ export const defaultGroupState =
     return Object.assign(defaultCommonState(), {
       kind: "group" as ("group"),
       children,
-      value: null,
+      value: createGroupValue(children),
       options,
     });
   };
@@ -135,6 +162,7 @@ export const defaultGroupState =
 /* ACTIONS */
 
 export interface FormStateChange {
+  reason?: string;
   changeValue?: { value: any; };
   changeFocus?: { hasFocus: boolean; isTouched: boolean; };
   changeDirty?: { isDirty: boolean; };
@@ -184,40 +212,108 @@ export const FieldActions = {
 };
 
 export const GroupActions = {
-  stateChanged: groupAction.of<FormStateChange>("STATE_CHANGED"),
+  stateChanged: groupAction.of<FormStateChange>("STATE_CHANGED", updateStateWithChange),
 
   reset: groupAction("RESET"),
 };
+
+/* FOCUS EFFECTS */
+
+const onFocusWhileBlurred = (store: FormFieldStore) =>
+  store.update$
+    .filter(u => FieldActions.focus.isA(u.action))
+    .filter(u => !u.state.hasFocus)
+    .map(u => FieldActions.stateChanged({
+      reason: "focus",
+      changeFocus: { hasFocus: true, isTouched: u.state.isTouched },
+    }));
+
+const onBlurredWhileFocused = (store: FormFieldStore) =>
+  store.update$
+    .filter(u => FieldActions.blur.isA(u.action))
+    .filter(u => u.state.hasFocus)
+    .map(u => FieldActions.stateChanged({
+      reason: "blur",
+      changeFocus: { hasFocus: false, isTouched: true },
+    }));
+
+const focusEffects = (store: FormFieldStore) =>
+  Observable.merge(
+    onFocusWhileBlurred(store),
+    onBlurredWhileFocused(store),
+  );
+
+/* RESET EFFECTS */
+
+const onResetField = (store: FormFieldStore) =>
+  store.update$
+    .filter(u => FieldActions.reset.isA(u.action))
+    .map(u => u.state)
+    .switchMap(s => {
+      let change: FormStateChange = {
+        reason: "reset",
+      };
+      if (!s.options.areEqual(s.value, s.options.initialValue, s)) {
+        change.changeValue = { value: s.options.initialValue };
+      }
+      if (s.isTouched) {
+        change.changeFocus = { hasFocus: s.hasFocus, isTouched: false };
+      }
+      if (s.isDirty) {
+        change.changeDirty = { isDirty: false };
+      }
+      if (change.changeDirty || change.changeFocus || change.changeValue) {
+        return Observable.of(FieldActions.stateChanged(change));
+      } else {
+        return Observable.empty<Action>();
+      }
+    });
+
+const resetFieldEffects = onResetField;
 
 /* STORE */
 
 const FormsFieldReducer = reducerFromActions(FieldActions);
 const FormsGroupReducer = reducerFromActions(GroupActions);
 
-const createFormFieldStore = (
+export const createFormFieldStore = (
   def: FormFieldDefinition,
-  createOptions?: CreateFormStoreOptions
-) =>
-  defineStore<FormFieldState, FormFieldStore>(
+  createOptions?: CreateFormStoreOptions,
+  storeOptions?: ICreateStoreOptions<CommonFormState>,
+) => {
+  const state = defaultFieldState(def, createOptions);
+  return defineStore<CommonFormState, FormFieldStore>(
     FormsFieldReducer,
-    defaultFieldState(def, createOptions),
-    extendWithActions(FieldActions))();
+    state,
+    extendWithActions(FieldActions),
+    extendWith(s => ({ value: state.value })),
+    withEffects(focusEffects, resetFieldEffects),
+  )(storeOptions);
+};
 
-const createFormGroupStore = (
+export const createFormGroupStore = (
   def: FormGroupDefinition,
-  createOptions?: CreateFormStoreOptions
-) =>
-  defineStore<FormGroupState, FormGroupStore>(
+  createOptions?: CreateFormStoreOptions,
+  storeOptions?: ICreateStoreOptions<CommonFormState>,
+) => {
+  const state = defaultGroupState(def, createOptions);
+  return defineStore<CommonFormState, FormGroupStore>(
     FormsGroupReducer,
-    defaultGroupState(def, createOptions),
-    extendWithActions(GroupActions))();
+    state,
+    extendWithActions(GroupActions),
+    extendWith(s => ({ value: state.value })),
+  )(storeOptions);
+};
 
-createFormStoreFunc = (def: FormDefinition,
-  createOptions?: CreateFormStoreOptions) => {
+createFormStoreFunc = (
+  def: FormDefinition,
+  createOptions?: CreateFormStoreOptions,
+  storeOptions?: ICreateStoreOptions<CommonFormState>,
+) => {
   if (def.kind === "field") {
-    return createFormFieldStore(def, createOptions);
+    return createFormFieldStore(def, createOptions, storeOptions);
   } else {
-    return createFormGroupStore(def, createOptions);
+    return createFormGroupStore(def, createOptions, storeOptions);
   }
 };
 
