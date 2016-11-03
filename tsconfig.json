@@ -16,6 +16,7 @@
 		"outDir": "dist",
 		"removeComments": false,
 		"strictNullChecks": true,
+		"inlineSourceMap": true,
 		"typeRoots": [
 			"node_modules/@types"
 		],

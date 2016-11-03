@@ -6,6 +6,7 @@ import "rxjs/add/observable/of";
 // import "rxjs/add/operator/catch";
 // import "rxjs/add/operator/concat";
 // import "rxjs/add/operator/delay";
+import "rxjs/add/operator/distinctUntilChanged";
 // import "rxjs/add/operator/do";
 // import "rxjs/add/operator/first";
 import "rxjs/add/operator/filter";
@@ -165,13 +166,13 @@ export interface FormStateChange {
   reason?: string;
   changeValue?: { value: any; };
   changeFocus?: { hasFocus: boolean; isTouched: boolean; };
-  changeDirty?: { isDirty: boolean; };
+  // changeDirty?: { isDirty: boolean; };
 }
 
 const fieldAction = actionCreator<FormFieldState>("RxStore@FORMS@FIELD@");
 const groupAction = actionCreator<FormGroupState>("RxStore@FORMS@GROUP@");
 
-const updateStateWithChange =
+const reduceOnStateChanged =
   <TState extends FormState>
     (state: TState, change: FormStateChange) => {
     let result = state;
@@ -190,20 +191,17 @@ const updateStateWithChange =
         isUntouched: !change.changeFocus.isTouched,
       });
     }
-    // DIRTY
-    if (change.changeDirty) {
-      result = reassignif(
-        change.changeDirty.isDirty !== state.isDirty,
-        result, {
-          isDirty: change.changeDirty.isDirty,
-          isPristine: !change.changeDirty.isDirty,
-        });
-    }
     return result;
   };
 
+const reduceOnSetDirty =
+  <TState extends FormState>
+    (state: TState, isDirty: boolean) =>
+    reassignif(state.isDirty !== isDirty, state, { isDirty, isPristine: !isDirty });
+
 export const FieldActions = {
-  stateChanged: fieldAction.of<FormStateChange>("STATE_CHANGED", updateStateWithChange),
+  stateChanged: fieldAction.of<FormStateChange>("STATE_CHANGED", reduceOnStateChanged),
+  setDirty: fieldAction.of<boolean>("SET_DIRTY", reduceOnSetDirty),
 
   update: fieldAction.of<any>("UPDATE"),
   blur: fieldAction("BLUR"),
@@ -212,7 +210,8 @@ export const FieldActions = {
 };
 
 export const GroupActions = {
-  stateChanged: groupAction.of<FormStateChange>("STATE_CHANGED", updateStateWithChange),
+  stateChanged: groupAction.of<FormStateChange>("STATE_CHANGED", reduceOnStateChanged),
+  setDirty: groupAction.of<boolean>("SET_DIRTY", reduceOnSetDirty),
 
   reset: groupAction("RESET"),
 };
@@ -245,31 +244,52 @@ const focusEffects = (store: FormFieldStore) =>
 
 /* RESET EFFECTS */
 
-const onResetField = (store: FormFieldStore) =>
+const resetFieldEffects = (store: FormFieldStore) =>
   store.update$
     .filter(u => FieldActions.reset.isA(u.action))
     .map(u => u.state)
     .switchMap(s => {
-      let change: FormStateChange = {
-        reason: "reset",
-      };
+      let change: FormStateChange = { reason: "reset" };
       if (!s.options.areEqual(s.value, s.options.initialValue, s)) {
         change.changeValue = { value: s.options.initialValue };
       }
       if (s.isTouched) {
         change.changeFocus = { hasFocus: s.hasFocus, isTouched: false };
       }
-      if (s.isDirty) {
-        change.changeDirty = { isDirty: false };
-      }
-      if (change.changeDirty || change.changeFocus || change.changeValue) {
+      if (change.changeFocus || change.changeValue) {
         return Observable.of(FieldActions.stateChanged(change));
       } else {
         return Observable.empty<Action>();
       }
     });
 
-const resetFieldEffects = onResetField;
+/* UPDATE EFFECTS */
+
+const updateEffects = (store: FormFieldStore) =>
+  store.update$
+    .filter(u => FieldActions.update.isA(u.action))
+    .switchMap(u => {
+      const { state: s, action } = u;
+      const value = action.payload;
+      let change: FormStateChange = { reason: "update" };
+      if (!s.options.areEqual(s.value, value, s)) {
+        change.changeValue = { value };
+        change.changeFocus = { hasFocus: s.hasFocus, isTouched: true };
+      }
+      if (change.changeFocus || change.changeValue) {
+        return Observable.of(FieldActions.stateChanged(change));
+      } else {
+        return Observable.empty<Action>();
+      }
+    });
+
+/* SET_DIRTY EFFECTS */
+const setDirtyFieldEffects = (store: FormFieldStore) =>
+  store.state$
+    .distinctUntilChanged((x, y) => x.value === y.value)
+    .map(s => !s.options.areEqual(s.value, s.options.initialValue, s))
+    .distinctUntilChanged()
+    .map(FieldActions.setDirty);
 
 /* STORE */
 
@@ -287,7 +307,7 @@ export const createFormFieldStore = (
     state,
     extendWithActions(FieldActions),
     extendWith(s => ({ value: state.value })),
-    withEffects(focusEffects, resetFieldEffects),
+    withEffects(focusEffects, resetFieldEffects, updateEffects, setDirtyFieldEffects),
   )(storeOptions);
 };
 

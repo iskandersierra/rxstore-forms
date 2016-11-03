@@ -164,20 +164,13 @@ describe("Test actions", () => {
         .withSample(helloTextField, { changeValue: { value: "" } }, initTextField)
         .withSample(initTextField, { changeFocus: { hasFocus: true, isTouched: true } }, focusedTextField)
         .withSample(initTextField, { changeFocus: { hasFocus: false, isTouched: true } }, touchedTextField)
-        .withSample(initTextField, { changeDirty: { isDirty: true } }, dirtyTextField)
-        .withSample(dirtyTextField, { changeDirty: { isDirty: false } }, initTextField)
-        .withSample(initTextField,
-        {
-          changeValue: { value: "hello" },
-          changeFocus: { hasFocus: true, isTouched: true },
-          changeDirty: { isDirty: true },
-        }, finalTextField)
-        .withSample(finalTextField,
-        {
-          changeValue: { value: "" },
-          changeFocus: { hasFocus: false, isTouched: false },
-          changeDirty: { isDirty: false },
-        }, initTextField)
+        ;
+
+      actions.typed("setDirty", "SET_DIRTY")
+        .withSample(initTextField, false, initTextField)
+        .withSample(initTextField, true, dirtyTextField)
+        .withSample(dirtyTextField, false, initTextField)
+        .withSample(dirtyTextField, true, dirtyTextField)
         ;
 
       actions.typed("update", "UPDATE");
@@ -198,20 +191,13 @@ describe("Test actions", () => {
         .withSample(changedGroup, { changeValue: { value: initGroupValue } }, initGroup)
         .withSample(initGroup, { changeFocus: { hasFocus: true, isTouched: true } }, focusedGroup)
         .withSample(initGroup, { changeFocus: { hasFocus: false, isTouched: true } }, touchedGroup)
-        .withSample(initGroup, { changeDirty: { isDirty: true } }, dirtyGroup)
-        .withSample(dirtyGroup, { changeDirty: { isDirty: false } }, initGroup)
-        .withSample(initGroup,
-        {
-          changeValue: { value: finalGroupValue },
-          changeFocus: { hasFocus: true, isTouched: true },
-          changeDirty: { isDirty: true },
-        }, finalGroup)
-        .withSample(finalGroup,
-        {
-          changeValue: { value: initGroupValue },
-          changeFocus: { hasFocus: false, isTouched: false },
-          changeDirty: { isDirty: false },
-        }, initGroup)
+        ;
+
+      actions.typed("setDirty", "SET_DIRTY")
+        .withSample(initGroup, false, initGroup)
+        .withSample(initGroup, true, dirtyGroup)
+        .withSample(dirtyGroup, false, initGroup)
+        .withSample(dirtyGroup, true, dirtyGroup)
         ;
 
       actions.empty("reset", "RESET");
@@ -220,7 +206,7 @@ describe("Test actions", () => {
 }); //    Test actions
 
 describe("Test field effects", () => {
-  const testFieldEffects = (
+  const testStateChangedEffects = (
     given: { given: string, init: FormFieldState },
     when: { when: string, action: Action },
     expectations: { expect: string, change: FormStateChange | undefined },
@@ -256,8 +242,42 @@ describe("Test field effects", () => {
     });
   };
 
+  const testSetDirtyEffects = (
+    given: { given: string, init: FormFieldState },
+    when: { when: string, action: Action },
+    expectations: { expect: string, isDirty: boolean | undefined },
+  ) => {
+    describe(given.given, () => {
+      describe(when.when, () => {
+        it(expectations.expect, () => {
+          const store = createFormFieldStore(sampleField, undefined, {
+            init: given.init,
+            middlewaresAfter: [
+              // logUpdates({ logger: console.info, caption: given.given }),
+            ],
+          });
+          const promise = store.action$
+            .filter(FieldActions.setDirty.isA)
+            .map(a => a.payload as boolean)
+            .takeUntil(Observable.interval(40))
+            .takeLast(1)
+            .toArray()
+            .toPromise() as PromiseLike<boolean[]>;
+          store.dispatch(when.action);
+          return promise.then(isDirty => {
+            if (expectations.isDirty !== undefined) {
+              expect(isDirty).toEqual([expectations.isDirty]);
+            } else {
+              expect(isDirty).toEqual([]);
+            }
+          });
+        });
+      }); //    When a focus action is dispatched
+    });
+  };
+
   describe("Focus", () => {
-    testFieldEffects( // untouched + focus -> focused/untouched
+    testStateChangedEffects( // untouched + focus -> focused/untouched
       { given: "Given an untouched field store", init: initTextField },
       { when: "When a focus action is dispatched", action: FieldActions.focus() },
       {
@@ -265,7 +285,7 @@ describe("Test field effects", () => {
         change: { changeFocus: { hasFocus: true, isTouched: false }, reason: "focus" },
       });
 
-    testFieldEffects( // touched + focus -> focused/touched
+    testStateChangedEffects( // touched + focus -> focused/touched
       { given: "Given a touched field store", init: touchedTextField },
       { when: "When a focus action is dispatched", action: FieldActions.focus() },
       {
@@ -273,7 +293,7 @@ describe("Test field effects", () => {
         change: { changeFocus: { hasFocus: true, isTouched: true }, reason: "focus" },
       });
 
-    testFieldEffects( // focused + focus -> []
+    testStateChangedEffects( // focused + focus -> []
       { given: "Given a focused field store", init: focusedTextField },
       { when: "When a focus action is dispatched", action: FieldActions.focus() },
       {
@@ -281,7 +301,7 @@ describe("Test field effects", () => {
         change: undefined,
       });
 
-    testFieldEffects( // untouched + blur -> untouched
+    testStateChangedEffects( // untouched + blur -> untouched
       { given: "Given an untouched field store", init: initTextField },
       { when: "When a blur action is dispatched", action: FieldActions.blur() },
       {
@@ -289,7 +309,7 @@ describe("Test field effects", () => {
         change: undefined,
       });
 
-    testFieldEffects( // touched + blur -> touched
+    testStateChangedEffects( // touched + blur -> touched
       { given: "Given a touched field store", init: touchedTextField },
       { when: "When a blur action is dispatched", action: FieldActions.blur() },
       {
@@ -297,7 +317,7 @@ describe("Test field effects", () => {
         change: undefined,
       });
 
-    testFieldEffects( // focused + blur -> touched
+    testStateChangedEffects( // focused + blur -> touched
       { given: "Given a focused field store", init: focusedTextField },
       { when: "When a blur action is dispatched", action: FieldActions.blur() },
       {
@@ -307,7 +327,7 @@ describe("Test field effects", () => {
   }); //    Focus
 
   describe("Reset", () => {
-    testFieldEffects( // (untouched, pristine, default) + reset -> (untouched, pristine, default) 
+    testStateChangedEffects( // (untouched, pristine, default) + reset -> (untouched, pristine, default) 
       { given: "Given an untouched field store", init: initTextField },
       { when: "When a reset action is dispatched", action: FieldActions.reset() },
       {
@@ -315,7 +335,15 @@ describe("Test field effects", () => {
         change: undefined,
       });
 
-    testFieldEffects( // (touched, pristine, default) + reset -> (untouched, pristine, default)
+    testSetDirtyEffects( // (untouched, pristine, default) + reset -> nothing 
+      { given: "Given an untouched field store", init: initTextField },
+      { when: "When a reset action is dispatched", action: FieldActions.reset() },
+      {
+        expect: "it should not emit any set dirty event",
+        isDirty: undefined,
+      });
+
+    testStateChangedEffects( // (touched, pristine, default) + reset -> (untouched, pristine, default)
       { given: "Given an touched field store", init: touchedTextField },
       { when: "When a reset action is dispatched", action: FieldActions.reset() },
       {
@@ -326,7 +354,7 @@ describe("Test field effects", () => {
         },
       });
 
-    testFieldEffects( // (focused, pristine, default) + reset -> (focused/untouched, pristine, default)
+    testStateChangedEffects( // (focused, pristine, default) + reset -> (focused/untouched, pristine, default)
       { given: "Given a focused field store", init: focusedTextField },
       { when: "When a reset action is dispatched", action: FieldActions.reset() },
       {
@@ -337,15 +365,61 @@ describe("Test field effects", () => {
         },
       });
 
-    testFieldEffects( // (untouched, dirty, default) + reset -> (untouched, pristine, default) 
-      { given: "Given a dirty field store", init: dirtyTextField },
+    testStateChangedEffects( // (focused, pristine, default) + reset -> (focused/untouched, pristine, default)
+      { given: "Given a modified text field store", init: helloTextField },
       { when: "When a reset action is dispatched", action: FieldActions.reset() },
       {
-        expect: "it should make the state pristine again",
+        expect: "it should emit a change to reflect a reset state",
         change: {
-          changeDirty: { isDirty: false },
+          changeValue: { value: initTextField.options.initialValue },
           reason: "reset",
         },
       });
+
+    testSetDirtyEffects( // dirty + reset -> pristine 
+      { given: "Given a dirty text field store", init: reassign(dirtyTextField, { value: "hello" }) },
+      { when: "When a reset action is dispatched", action: FieldActions.reset() },
+      {
+        expect: "it should emit a set dirty event to false",
+        isDirty: false,
+      });
   }); //    Reset
+
+  describe("Update", () => {
+    testStateChangedEffects( // default + update(default) -> default 
+      { given: "Given a default field store", init: initTextField },
+      { when: "When a update action is dispatched with default value", action: FieldActions.update("") },
+      {
+        expect: "it should not emit a change",
+        change: undefined,
+      });
+
+    testSetDirtyEffects( // (untouched, pristine, default) + reset -> nothing 
+      { given: "Given a default field store", init: initTextField },
+      { when: "When a update action is dispatched with default value", action: FieldActions.update("") },
+      {
+        expect: "it should not emit any set dirty event",
+        isDirty: undefined,
+      });
+
+    testStateChangedEffects( // default + update(value) -> value 
+      { given: "Given a default field store", init: initTextField },
+      { when: "When a update action is dispatched with a value", action: FieldActions.update("hello") },
+      {
+        expect: "it should emit a change with the value and touched set",
+        change: {
+          changeValue: { value: "hello" },
+          changeFocus: { hasFocus: false, isTouched: true },
+          reason: "update",
+        },
+      });
+
+    testSetDirtyEffects( // (untouched, pristine, default) + reset -> nothing 
+      { given: "Given a default field store", init: initTextField },
+      { when: "When a update action is dispatched with a value", action: FieldActions.update("hello") },
+      {
+        expect: "it should emit a set dirty event to true",
+        isDirty: true,
+      });
+  }); //    Update
 }); //    Test effects
